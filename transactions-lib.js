@@ -25,7 +25,8 @@ const KIND_BLOCK = 0x14;
 const blobURL = URL.createObjectURL(new Blob([ '(',
         function(){
             onmessage = function(e) {
-                self.importScripts('https://store.thepower.io/sha512.min.js');
+                var origin = e.data[3];
+                self.importScripts(origin + '/sha512.min.js');
 
                 function validateHash(hash, difficulty) {
                     var index = hash.findIndex(item => item !== 0);
@@ -79,7 +80,7 @@ function _generateNonce(body, offset, powDifficulty) {
         worker.onerror = function(event) {
             reject(event);
         };
-        worker.postMessage([body, offset, powDifficulty]);
+        worker.postMessage([body, offset, powDifficulty, window.location.origin]);
     });
 }
 
@@ -198,10 +199,9 @@ const TransactionsAPI = {
         const payload = msgPack.encode(tx);
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
-    prepareTXFromSC(feeSettings, address, sc, seq, scData, gasToken = 'SK', gasValue = 5000) {
+    prepareTXFromSC(feeSettings, address, seq, scData, gasToken = 'SK', gasValue = 5000) {
         const timestamp = +new Date();
         address = Buffer.from(AddressAPI.parseTextAddress(address));
-        sc = Buffer.from(AddressAPI.parseTextAddress(sc));
 
         const actual = scData.k !== KIND_PATCH ? {
             t: timestamp,

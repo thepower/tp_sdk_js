@@ -6,6 +6,7 @@
   "dependencies": {
     "bitcoinjs-lib": "^3.3.0",
     "event-lite": "^0.1.1",
+    "idempotent-babel-polyfill": "^7.0.0",
     "ieee754": "^1.1.8",
     "int64-buffer": "^0.1.9",
     "isarray": "^1.0.0"

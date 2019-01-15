@@ -42,7 +42,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 module.exports = {
-    entry: ['babel-polyfill', './main.js'],
+    entry: ['idempotent-babel-polyfill', './main.js'],
     resolve: {
         modules: ['node_modules', path.join(__dirname, 'src')],
         extensions: ['.js']
