@@ -84,14 +84,11 @@ function _generateNonce(body, offset, powDifficulty) {
 }
 
 async function _getRegisterTxBody(chain, publicKey, timestamp, referrer, powDifficulty = 16) {
-    const clid = `power_wallet_${process.env.GIT_HEAD_HASH}`;
-
     let body = {
         k: KIND_REGISTER,
         t: timestamp,
         nonce: 0,
-        h: createHash('sha256').update(publicKey).digest(),
-        e: {clid}
+        h: createHash('sha256').update(publicKey).digest()
     };
 
     if (referrer) {
