@@ -164,6 +164,22 @@ function _wrapAndSignPayload(payload, keyPair, publicKey) {
     };
 }
 
+function _isSingleSignatureValid(body, bsig) {
+    const publicKey = TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, bsig);
+    const signature = TransactionsAPI.extractTaggedDataFromBSig(TAG_SIGNATURE, bsig);
+    const ecsig = Bitcoin.ECSignature.fromDER(signature);
+    const keyPair = Bitcoin.ECPair.fromPublicKeyBuffer(Buffer.from(publicKey));
+
+    const extraData = bsig.subarray(signature.length + 2);
+
+    let dataToHash = new Uint8Array(extraData.length + body.length);
+    dataToHash.set(extraData);
+    dataToHash.set(body, extraData.length);
+    const hash = createHash('sha256').update(dataToHash).digest();
+
+    return keyPair.verify(hash, ecsig)
+}
+
 const TransactionsAPI = {
     composeSimpleTransferTX(feeSettings, wif, from, to, token, amount, message, seq) {
         const keyPair = Bitcoin.ECPair.fromWIF(wif);
@@ -211,6 +227,33 @@ const TransactionsAPI = {
         } : {};
 
         return _computeFee(Object.assign({}, scData, actual), feeSettings)
+    },
+    decodeTx(tx) {
+        if (!Buffer.isBuffer(tx)) {
+            tx = new Buffer(tx, 'base64');
+        }
+        tx = msgPack.decode(tx);
+        tx.body = msgPack.decode(tx.body)
+        return tx
+    },
+    listValidTxSignatures(tx) {
+        if (!Buffer.isBuffer(tx)) {
+            tx = new Buffer(tx, 'base64');
+        }
+        tx = msgPack.decode(tx);
+        let {body, sig} = tx;
+
+        const validSignatures = sig.filter(signature => _isSingleSignatureValid(body, signature));
+        const invalidSignaturesCount = sig.length - validSignatures.length
+
+        return {validSignatures, invalidSignaturesCount}
+    },
+    extractTaggedDataFromBSig(tag, bsig) {
+        let index = 0;
+        while (bsig[index] !== tag && index < bsig.length) {
+            index = index + bsig[index + 1] + 2;
+        }
+        return bsig.subarray(index + 2, index + 2 + bsig[index + 1])
     }
 };
 
