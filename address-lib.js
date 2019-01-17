@@ -120,7 +120,7 @@ const AddressLib = {
         return result;
     },
 
-    parseTextAddress(textAddress) {
+    decodeAddress(textAddress) {
         //BBBB BBBB BBAA AAAA CC
         //GGgg AAAA AAAA AAAA AACC
         let binaryAddress, checksum, addrChecksum;
