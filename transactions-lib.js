@@ -1,6 +1,7 @@
 const Bitcoin = require('bitcoinjs-lib');
 const createHash = require('create-hash');
 const msgPack = require('./tp_msgpack/msgpack-lite');
+const Axios = require('axios');
 const Buffer = require("safe-buffer").Buffer;
 const AddressAPI = require('./address-lib');
 
@@ -254,6 +255,14 @@ const TransactionsAPI = {
             index = index + bsig[index + 1] + 2;
         }
         return bsig.subarray(index + 2, index + 2 + bsig[index + 1])
+    },
+    async sendTx(tx, baseURL) {
+        const result = await Axios.post(baseURL + '/tx/new', {tx});
+        return result.data
+    },
+    async getTxStatus(txId, baseURL) {
+        const result = await Axios.get(baseURL + '/tx/status/' + txId);
+        return result.data
     }
 };
 
