@@ -4,6 +4,8 @@ const msgPack = require('./tp_msgpack/msgpack-lite');
 const Axios = require('axios');
 const Buffer = require("safe-buffer").Buffer;
 const AddressAPI = require('./address-lib');
+const {numberToUInt64Array, flattenDeep, sleep} = require('./utils');
+const {getBlock, getBinBlock, getSettings} = require('./network');
 
 const TAG_TIMESTAMP = 0x01;
 const TAG_PUBLIC_KEY = 0x02;
@@ -23,7 +25,7 @@ const KIND_DEPLOY = 0x12;
 const KIND_PATCH = 0x13;
 const KIND_BLOCK = 0x14;
 
-const blobURL = URL.createObjectURL(new Blob([ '(',
+/*const blobURL = URL.createObjectURL(new Blob([ '(',
         function(){
             onmessage = function(e) {
                 var origin = e.data[3];
@@ -68,7 +70,7 @@ const blobURL = URL.createObjectURL(new Blob([ '(',
         ')()'], {type: 'application/javascript' })),
     worker = new Worker(blobURL);
 
-URL.revokeObjectURL(blobURL);
+URL.revokeObjectURL(blobURL);*/
 
 function _generateNonce(body, offset, powDifficulty) {
     if (powDifficulty > 30) {
@@ -165,7 +167,7 @@ function _wrapAndSignPayload(payload, keyPair, publicKey) {
     };
 }
 
-function _isSingleSignatureValid(body, bsig) {
+function _isSingleSignatureValid(data, bsig) {
     const publicKey = TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, bsig);
     const signature = TransactionsAPI.extractTaggedDataFromBSig(TAG_SIGNATURE, bsig);
     const ecsig = Bitcoin.ECSignature.fromDER(signature);
@@ -173,12 +175,86 @@ function _isSingleSignatureValid(body, bsig) {
 
     const extraData = bsig.subarray(signature.length + 2);
 
-    let dataToHash = new Uint8Array(extraData.length + body.length);
+    let dataToHash = new Uint8Array(extraData.length + data.length);
     dataToHash.set(extraData);
-    dataToHash.set(body, extraData.length);
+    dataToHash.set(data, extraData.length);
     const hash = createHash('sha256').update(dataToHash).digest();
 
     return keyPair.verify(hash, ecsig)
+}
+
+async function _awaitTransactionCompletion(txId, baseURL) {
+    let count = 0, done = false, status;
+    do {
+        status = await TransactionsAPI.getTxStatus(txId, baseURL);
+        count++;
+
+        if (status.res) {
+            if (status.res.error) {
+                throw new Error(status.res.res);
+            } else {
+                done = true;
+            }
+        } else {
+            if (count < 60) {
+                await sleep(1000);
+            } else {
+                throw new Error('Tx status timeout')
+            }
+        }
+    } while(!done);
+
+    return status.res;
+}
+
+async function _awaitBlockAfter(hash, baseURL) {
+    let done = false, count = 0;
+
+    do {
+        const {'block': lastBlock} = await getBlock('last', baseURL);
+        count++;
+
+        if (lastBlock.hash !== hash) {
+            if (lastBlock.header.parent === hash) {
+                return
+            }
+            const {ownBlock} = await getBlock(hash, baseURL);
+            if (ownBlock.child) {
+                return
+            } else {
+                throw new Error('Tx block is rejected')
+            }
+        }
+
+        if (count > 10) {
+            throw new Error('Next block timeout');
+        }
+
+        await sleep(1000)
+    } while(!done)
+}
+
+async function _isBlockValid(hash, baseURL) {
+    const binBlock = await getBinBlock(hash, baseURL);
+    const {settings} = await getSettings(baseURL);
+    //TODO remove hardcode
+    const {minsig} = settings.chain['3'];
+    const keys = Object.values(settings.keys);
+
+    const {header, sign} = msgPack.decode(binBlock);
+    const dataToHash = Buffer.from(flattenDeep([
+        numberToUInt64Array(header.chain),
+        numberToUInt64Array(header.height),
+        ...header.parent,
+        header.roots.map(item => [...item[1]])
+    ]));
+    const headerHash = createHash('sha256').update(dataToHash).digest();
+
+    const validSignatures = sign
+        .filter(signature =>
+            keys.includes(TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, signature).toString('base64')) &&
+            _isSingleSignatureValid(headerHash, signature));
+    return validSignatures.length >= minsig
 }
 
 const TransactionsAPI = {
@@ -187,8 +263,8 @@ const TransactionsAPI = {
         const publicKey = keyPair.getPublicKeyBuffer();
         const timestamp = parseInt(+new Date());
 
-        from = Buffer.from(AddressAPI.parseTextAddress(from));
-        to = Buffer.from(AddressAPI.parseTextAddress(to));
+        from = Buffer.from(AddressAPI.decodeAddress(from));
+        to = Buffer.from(AddressAPI.decodeAddress(to));
 
         const payload = msgPack.encode(_getSimpleTransferTxBody(from, to, token, amount, message, timestamp, seq, feeSettings));
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
@@ -204,8 +280,8 @@ const TransactionsAPI = {
     calculateFee(feeSettings, from, to, token, amount, message, seq) {
         const timestamp = parseInt(+new Date());
 
-        from = Buffer.from(AddressAPI.parseTextAddress(from));
-        to = Buffer.from(AddressAPI.parseTextAddress(to));
+        from = Buffer.from(AddressAPI.decodeAddress(from));
+        to = Buffer.from(AddressAPI.decodeAddress(to));
 
         const payload = _getSimpleTransferTxBody(from, to, token, amount, message, timestamp, seq, feeSettings);
         return payload.p.find(item => item[0] === PURPOSE_SRCFEE)
@@ -218,7 +294,7 @@ const TransactionsAPI = {
     },
     prepareTXFromSC(feeSettings, address, seq, scData, gasToken = 'SK', gasValue = 5000) {
         const timestamp = +new Date();
-        address = Buffer.from(AddressAPI.parseTextAddress(address));
+        address = Buffer.from(AddressAPI.decodeAddress(address));
 
         const actual = scData.k !== KIND_PATCH ? {
             t: timestamp,
@@ -234,7 +310,7 @@ const TransactionsAPI = {
             tx = new Buffer(tx, 'base64');
         }
         tx = msgPack.decode(tx);
-        tx.body = msgPack.decode(tx.body)
+        tx.body = msgPack.decode(tx.body);
         return tx
     },
     listValidTxSignatures(tx) {
@@ -245,7 +321,7 @@ const TransactionsAPI = {
         let {body, sig} = tx;
 
         const validSignatures = sig.filter(signature => _isSingleSignatureValid(body, signature));
-        const invalidSignaturesCount = sig.length - validSignatures.length
+        const invalidSignaturesCount = sig.length - validSignatures.length;
 
         return {validSignatures, invalidSignaturesCount}
     },
@@ -263,6 +339,23 @@ const TransactionsAPI = {
     async getTxStatus(txId, baseURL) {
         const result = await Axios.get(baseURL + '/tx/status/' + txId);
         return result.data
+    },
+    async sendTxWithConfirmation(tx, baseURL) {
+        const {txid, ok, msg} = await TransactionsAPI.sendTx(tx, baseURL);
+
+        if (!ok) {
+            throw new Error(msg)
+        }
+
+        const {block} = await _awaitTransactionCompletion(txid, baseURL);
+
+        await _awaitBlockAfter(block, baseURL);
+
+        if (!await _isBlockValid(block, baseURL)) {
+            throw "Block is invalid"
+        }
+        
+        return txid
     }
 };
 
