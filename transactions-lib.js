@@ -25,7 +25,7 @@ const KIND_DEPLOY = 0x12;
 const KIND_PATCH = 0x13;
 const KIND_BLOCK = 0x14;
 
-/*const blobURL = URL.createObjectURL(new Blob([ '(',
+const blobURL = URL.createObjectURL(new Blob([ '(',
         function(){
             onmessage = function(e) {
                 var origin = e.data[3];
@@ -70,7 +70,7 @@ const KIND_BLOCK = 0x14;
         ')()'], {type: 'application/javascript' })),
     worker = new Worker(blobURL);
 
-URL.revokeObjectURL(blobURL);*/
+URL.revokeObjectURL(blobURL);
 
 function _generateNonce(body, offset, powDifficulty) {
     if (powDifficulty > 30) {
@@ -236,12 +236,11 @@ async function _awaitBlockAfter(hash, baseURL) {
 
 async function _isBlockValid(hash, baseURL) {
     const binBlock = await getBinBlock(hash, baseURL);
-    const {settings} = await getSettings(baseURL);
-    //TODO remove hardcode
-    const {minsig} = settings.chain['3'];
-    const keys = Object.values(settings.keys);
-
     const {header, sign} = msgPack.decode(binBlock);
+    const {settings} = await getSettings(baseURL);
+    const {minsig} = settings.chain[header.chain];
+    const neighbours = Object.entries(settings.nodechain).reduce((acc, item) => item[1] === header.chain ? [...acc, item[0]] : acc, []);
+    const chainKeys = neighbours.map(item => settings.keys[item]);
     const dataToHash = Buffer.from(flattenDeep([
         numberToUInt64Array(header.chain),
         numberToUInt64Array(header.height),
@@ -252,7 +251,7 @@ async function _isBlockValid(hash, baseURL) {
 
     const validSignatures = sign
         .filter(signature =>
-            keys.includes(TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, signature).toString('base64')) &&
+            chainKeys.includes(Buffer.from(TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, signature)).toString('base64')) &&
             _isSingleSignatureValid(headerHash, signature));
     return validSignatures.length >= minsig
 }
@@ -352,7 +351,7 @@ const TransactionsAPI = {
         await _awaitBlockAfter(block, baseURL);
 
         if (!await _isBlockValid(block, baseURL)) {
-            throw "Block is invalid"
+            throw new Error("Block is invalid")
         }
         
         return txid

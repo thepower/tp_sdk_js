@@ -8,7 +8,7 @@ const network = {
 
     async getBinBlock(hash, baseURL) {
         const result = await Axios.get(baseURL + '/binblock/' + hash, {responseType: 'arraybuffer'});
-        return result.data
+        return Buffer.from(result.data)
     },
 
     async getSettings(baseURL) {

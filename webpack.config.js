@@ -57,7 +57,7 @@ module.exports = {
     },
     module: {
         loaders: [
-            { test: /\.js$/, loader: 'babel-loader', query: {plugins: ['transform-class-properties'], presets: ['env']}, exclude: [/node_modules/, /public/] },
+            { test: /\.js$/, loader: 'babel-loader', query: {plugins: ['transform-class-properties', 'transform-object-rest-spread'], presets: ['env']}, exclude: [/node_modules/, /public/] },
         ]
     },
     devtool: process.env.NODE_ENV !== 'production' && process.env.NODE_ENV !== 'electron'? 'source-map' : false,
