@@ -473,6 +473,40 @@ will produce (assuming no network error occurs) object similar to
 }
 ```
 
+- sendTxWithConfirmation
+
+```js
+sendTxWithConfirmation(txId, baseURL)
+```
+
+Use this method to send transaction and wait for it to be confirmed.
+Transaction is confirmed when it has been accepted and completed by the node, node created at least one block after the block that contains transaction and the block that contains transaction is valid.
+
+It accepts the following arguments:
+
+txId - id of transaction;
+
+baseURL - node's base URL.
+
+Method returns tx id or throws exception if some error occurred.
+
+For example:
+
+```js
+tx = {
+    k: 16,
+    t: +new Date(),
+    f: [128, 1, 64, 0, 3, 0, 1, 11],
+    to: [128, 1, 64, 0, 3, 0, 3, 40],
+    s: 2,
+    p: [[0, 'FTT', 2]]
+}
+const packedTx = tpSdk.transactionsLib.packAndSignTX(tx, 'L2QajgeaXjGdWHPziUaA5bJVaZgbx7qTFQERQ6DAwu38m8uc7Cya')
+
+await tpSdk.transactionsLib.sendTxWithConfirmation(packedTx, 'http://wallet.thepower.io/api/chain/3')
+```
+
+will produce (assuming no error occurs) tx id similar to "2Nxios3hijA7Xow6Tv5-c3n4"
 
 #### Note:
 `feeSettings` object have following fields:
