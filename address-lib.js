@@ -120,7 +120,7 @@ const AddressLib = {
         return result;
     },
 
-    decodeAddress(textAddress) {
+    parseTextAddress(textAddress) {
         //BBBB BBBB BBAA AAAA CC
         //GGgg AAAA AAAA AAAA AACC
         let binaryAddress, checksum, addrChecksum;
@@ -159,10 +159,10 @@ const AddressLib = {
     },
 
     textAddressToHex(address) {
-        const binnaryAddress = AddressLib.parseTextAddress(address);
+        const binaryAddress = AddressLib.parseTextAddress(address);
         let result = '';
-        for (let i = 0; i < binnaryAddress.length; i++) {
-            result += pad(16, binnaryAddress[i], 2);
+        for (let i = 0; i < binaryAddress.length; i++) {
+            result += pad(16, binaryAddress[i], 2);
         }
 
         return result;

@@ -4,8 +4,6 @@ const msgPack = require('./tp_msgpack/msgpack-lite');
 const Axios = require('axios');
 const Buffer = require("safe-buffer").Buffer;
 const AddressAPI = require('./address-lib');
-const {numberToUInt64Array, flattenDeep, sleep} = require('./utils');
-const {getBlock, getBinBlock, getSettings} = require('./network');
 
 const TAG_TIMESTAMP = 0x01;
 const TAG_PUBLIC_KEY = 0x02;
@@ -183,79 +181,6 @@ function _isSingleSignatureValid(data, bsig) {
     return keyPair.verify(hash, ecsig)
 }
 
-async function _awaitTransactionCompletion(txId, baseURL) {
-    let count = 0, done = false, status;
-    do {
-        status = await TransactionsAPI.getTxStatus(txId, baseURL);
-        count++;
-
-        if (status.res) {
-            if (status.res.error) {
-                throw new Error(status.res.res);
-            } else {
-                done = true;
-            }
-        } else {
-            if (count < 60) {
-                await sleep(1000);
-            } else {
-                throw new Error('Tx status timeout')
-            }
-        }
-    } while(!done);
-
-    return status.res;
-}
-
-async function _awaitBlockAfter(hash, baseURL) {
-    let done = false, count = 0;
-
-    do {
-        const {'block': lastBlock} = await getBlock('last', baseURL);
-        count++;
-
-        if (lastBlock.hash !== hash) {
-            if (lastBlock.header.parent === hash) {
-                return
-            }
-            const {ownBlock} = await getBlock(hash, baseURL);
-            if (ownBlock.child) {
-                return
-            } else {
-                throw new Error('Tx block is rejected')
-            }
-        }
-
-        if (count > 10) {
-            throw new Error('Next block timeout');
-        }
-
-        await sleep(1000)
-    } while(!done)
-}
-
-async function _isBlockValid(hash, baseURL) {
-    const binBlock = await getBinBlock(hash, baseURL);
-    const {header, sign} = msgPack.decode(binBlock);
-    const {settings} = await getSettings(baseURL);
-    const {minsig} = settings.chain[header.chain];
-    const neighbours = Object.entries(settings.nodechain).reduce((acc, item) => item[1] === header.chain ? [...acc, item[0]] : acc, []);
-    const chainKeys = neighbours.map(item => settings.keys[item]);
-    const dataToHash = Buffer.from(flattenDeep([
-        numberToUInt64Array(header.chain),
-        numberToUInt64Array(header.height),
-        ...header.parent,
-        header.roots.map(item => [...item[1]])
-    ]));
-    const headerHash = createHash('sha256').update(dataToHash).digest();
-
-    const validSignatures = sign
-        .filter(signature =>
-            chainKeys.includes(Buffer.from(TransactionsAPI.extractTaggedDataFromBSig(TAG_PUBLIC_KEY, signature)).toString('base64')) &&
-            _isSingleSignatureValid(headerHash, signature));
-    return validSignatures.length >= minsig
-}
-
 const TransactionsAPI = {
     composeSimpleTransferTX(feeSettings, wif, from, to, token, amount, message, seq) {
         const keyPair = Bitcoin.ECPair.fromWIF(wif);
@@ -276,6 +201,7 @@ const TransactionsAPI = {
         const payload = msgPack.encode(await _getRegisterTxBody(chain, publicKey, timestamp, referrer));
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
+
     calculateFee(feeSettings, from, to, token, amount, message, seq) {
         const timestamp = parseInt(+new Date());
 
@@ -285,12 +211,14 @@ const TransactionsAPI = {
         const payload = _getSimpleTransferTxBody(from, to, token, amount, message, timestamp, seq, feeSettings);
         return payload.p.find(item => item[0] === PURPOSE_SRCFEE)
     },
+
     packAndSignTX(tx, wif) {
         const keyPair = Bitcoin.ECPair.fromWIF(wif);
         const publicKey = keyPair.getPublicKeyBuffer();
         const payload = msgPack.encode(tx);
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
+
     prepareTXFromSC(feeSettings, address, seq, scData, gasToken = 'SK', gasValue = 5000) {
         const timestamp = +new Date();
         address = Buffer.from(AddressAPI.decodeAddress(address));
@@ -304,6 +232,7 @@ const TransactionsAPI = {
 
         return _computeFee(Object.assign({}, scData, actual), feeSettings)
     },
+
     decodeTx(tx) {
         if (!Buffer.isBuffer(tx)) {
             tx = new Buffer(tx, 'base64');
@@ -312,6 +241,7 @@ const TransactionsAPI = {
         tx.body = msgPack.decode(tx.body);
         return tx
     },
+
     listValidTxSignatures(tx) {
         if (!Buffer.isBuffer(tx)) {
             tx = new Buffer(tx, 'base64');
@@ -324,6 +254,7 @@ const TransactionsAPI = {
 
         return {validSignatures, invalidSignaturesCount}
     },
+
     extractTaggedDataFromBSig(tag, bsig) {
         let index = 0;
         while (bsig[index] !== tag && index < bsig.length) {
@@ -331,30 +262,55 @@ const TransactionsAPI = {
         }
         return bsig.subarray(index + 2, index + 2 + bsig[index + 1])
     },
-    async sendTx(tx, baseURL) {
-        const result = await Axios.post(baseURL + '/tx/new', {tx});
-        return result.data
+
+    composeDeployTX(address, code, initParams, gasToken, gasValue, wif, feeSettings) {
+        //initParams = [Buffer.from(AddressAPI.parseTextAddress(address))];
+        const body = {
+            k: KIND_DEPLOY,
+            t: +new Date(),
+            f: Buffer.from(AddressAPI.parseTextAddress(address)),
+            to: Buffer.from(AddressAPI.parseTextAddress(address)),
+            s: +new Date(),
+            p: [[PURPOSE_GAS, gasToken, gasValue]],
+            c: ['init', initParams],
+            //"e": {'code': Buffer.from(new Uint8Array(code)), "vm": "wasm", "view": ["sha1:2b4ccea0d1de703012832f374e30effeff98fe4d", "/questions.wasm"]}
+            e: {'code': Buffer.from(new Uint8Array(code)), "vm": "wasm", "view": []}
+        };
+        return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
     },
-    async getTxStatus(txId, baseURL) {
-        const result = await Axios.get(baseURL + '/tx/status/' + txId);
-        return result.data
+
+    composeAuthTX(address, authAddress, params, gasToken, gasValue, wif, feeSettings) {
+        return TransactionsAPI.composeSCMethodCallTX(address, authAddress, ['set', params], gasToken, gasValue, wif, feeSettings);
     },
-    async sendTxWithConfirmation(tx, baseURL) {
-        const {txid, ok, msg} = await TransactionsAPI.sendTx(tx, baseURL);
 
-        if (!ok) {
-            throw new Error(msg)
-        }
+    composePasswordChangeTX(address, authAddress, params, gasToken, gasValue, wif, feeSettings) {
+        return TransactionsAPI.composeSCMethodCallTX(address, authAddress, ['update', params], gasToken, gasValue, wif, feeSettings);
+    },
 
-        const {block} = await _awaitTransactionCompletion(txid, baseURL);
+    composeVoteTX(address, vote, params, gasToken, gasValue, wif, feeSettings) {
+        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['vote', params], gasToken, gasValue, wif, feeSettings);
+    },
 
-        await _awaitBlockAfter(block, baseURL);
+    composeUserEstimateTX(address, vote, params, gasToken, gasValue, wif, feeSettings) {
+        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['save_user_estimate', params], gasToken, gasValue, wif, feeSettings);
+    },
 
-        if (!await _isBlockValid(block, baseURL)) {
-            throw new Error("Block is invalid")
-        }
-        
-        return txid
+    composeStartEstimateTX(address, vote, gasToken, gasValue, wif, feeSettings) {
+        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['calculate_result', []], gasToken, gasValue, wif, feeSettings);
+    },
+
+    composeSCMethodCallTX(address, sc, toCall, gasToken, gasValue, wif, feeSettings) {
+        const body = {
+            k: KIND_GENERIC,
+            t: +new Date(),
+            f: Buffer.from(AddressAPI.parseTextAddress(address)),
+            to: Buffer.from(AddressAPI.parseTextAddress(sc)),
+            s: +new Date(),
+            p: [/*[PURPOSE_GAS, gasToken, gasValue]*/],
+            c: toCall,
+        };
+        console.log(body)
+        return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
     }
 };
 

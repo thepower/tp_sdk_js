@@ -11,7 +11,8 @@
     "idempotent-babel-polyfill": "^7.0.0",
     "ieee754": "^1.1.8",
     "int64-buffer": "^0.1.9",
-    "isarray": "^1.0.0"
+    "isarray": "^1.0.0",
+    "lz4js": "^0.2.0"
   },
   "devDependencies": {
     "path": "^0.12.7",
