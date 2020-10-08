@@ -309,7 +309,7 @@ const TransactionsAPI = {
             p: [/*[PURPOSE_GAS, gasToken, gasValue]*/],
             c: toCall,
         };
-        console.log(body)
+
         return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
     }
 };

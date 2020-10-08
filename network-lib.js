@@ -183,6 +183,57 @@ const bootstrapChain = async (chain) => {
     throw new Error(`Unknown chain ${chain}`);
 };
 
+const checkTransaction = async (txId, callback, count = 0) => {
+    let status;
+
+    if (!callback) {
+        throw new Error('No tx status callback specified');
+    }
+
+    try {
+        status = await NetworkLib.askBlockchainTo('GET_TRANSACTION_STATUS', {txId});
+    } catch(e) {
+        callback(false, 'Network error');
+    }
+
+    if (status) {
+        if (status.error) {
+            callback(false, status.res);
+        } else {
+            callback(true, 'Success');
+        }
+    } else if (count < 240) {
+        setTimeout(() => checkTransaction(txId, callback, ++count), 1000);
+    } else {
+        callback(false, 'Transaction status lost');
+    }
+}
+
+function _getFeeSettings(settings) {
+    settings = settings.current;
+    let feeCur;
+
+    if (settings.fee) {
+        settings = settings.fee;
+        if (settings.SK) {
+            feeCur = 'SK'
+        } else if (settings.FEE) {
+            feeCur = 'FEE'
+        } else {
+            return {}
+        }
+    } else {
+        return {}
+    }
+
+    return {
+        feeCur,
+        fee: settings[feeCur].base,
+        baseEx: settings[feeCur].baseextra,
+        kb: settings[feeCur].kb,
+    }
+}
+
 const NetworkLib = {
     async setChain(chain) {
         if (nodesCache[chain]) {
@@ -287,7 +338,27 @@ const NetworkLib = {
         const {chain} = await this.askBlockchainTo('GET_MY_CHAIN', {address});
 
         return chain;
-    }
+    },
+
+    async sendPreparedTX(tx, callback) {
+        const response = await this.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
+        if (callback) {
+            setTimeout(() => checkTransaction(response.txid, callback), 1000);
+        }
+        return response;
+    },
+
+    sendTxAndWaitForResponse(tx, timeout = 120000) {
+        return new Promise((resolve, reject) => {
+            this.sendPreparedTX(tx, (success, message) => success ? resolve(message) : reject(message));
+            setTimeout(() => reject('Timeout'), timeout);
+        })
+    },
+
+    async getFeeSettings() {
+        const settings = await this.askBlockchainTo('GET_NODE_SETTINGS');
+        return _getFeeSettings(settings);
+    },
 };
 
 module.exports = NetworkLib;
