@@ -193,6 +193,7 @@ const TransactionsAPI = {
         const payload = msgPack.encode(_getSimpleTransferTxBody(from, to, token, amount, message, timestamp, seq, feeSettings));
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
+
     async composeRegisterTX(chain, wif, referrer) {
         const keyPair = Bitcoin.ECPair.fromWIF(wif);
         const publicKey = keyPair.getPublicKeyBuffer();
@@ -242,27 +243,6 @@ const TransactionsAPI = {
         return tx
     },
 
-    listValidTxSignatures(tx) {
-        if (!Buffer.isBuffer(tx)) {
-            tx = new Buffer(tx, 'base64');
-        }
-        tx = msgPack.decode(tx);
-        let {body, sig} = tx;
-
-        const validSignatures = sig.filter(signature => _isSingleSignatureValid(body, signature));
-        const invalidSignaturesCount = sig.length - validSignatures.length;
-
-        return {validSignatures, invalidSignaturesCount}
-    },
-
-    extractTaggedDataFromBSig(tag, bsig) {
-        let index = 0;
-        while (bsig[index] !== tag && index < bsig.length) {
-            index = index + bsig[index + 1] + 2;
-        }
-        return bsig.subarray(index + 2, index + 2 + bsig[index + 1])
-    },
-
     composeDeployTX(address, code, initParams, gasToken, gasValue, wif, feeSettings) {
         //initParams = [Buffer.from(AddressAPI.parseTextAddress(address))];
         const body = {
@@ -273,7 +253,6 @@ const TransactionsAPI = {
             s: +new Date(),
             p: [[PURPOSE_GAS, gasToken, gasValue]],
             c: ['init', initParams],
-            //"e": {'code': Buffer.from(new Uint8Array(code)), "vm": "wasm", "view": ["sha1:2b4ccea0d1de703012832f374e30effeff98fe4d", "/questions.wasm"]}
             e: {'code': Buffer.from(new Uint8Array(code)), "vm": "wasm", "view": []}
         };
         return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
@@ -287,19 +266,7 @@ const TransactionsAPI = {
         return TransactionsAPI.composeSCMethodCallTX(address, authAddress, ['update', params], gasToken, gasValue, wif, feeSettings);
     },
 
-    composeVoteTX(address, vote, params, gasToken, gasValue, wif, feeSettings) {
-        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['vote', params], gasToken, gasValue, wif, feeSettings);
-    },
-
-    composeUserEstimateTX(address, vote, params, gasToken, gasValue, wif, feeSettings) {
-        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['save_user_estimate', params], gasToken, gasValue, wif, feeSettings);
-    },
-
-    composeStartEstimateTX(address, vote, gasToken, gasValue, wif, feeSettings) {
-        return TransactionsAPI.composeSCMethodCallTX(address, vote, ['calculate_result', []], gasToken, gasValue, wif, feeSettings);
-    },
-
-    composeSCMethodCallTX(address, sc, toCall, gasToken, gasValue, wif, feeSettings) {
+    composeSCMethodCallTX(address, sc, toCall, /*gasToken, gasValue,*/ wif, feeSettings) {
         const body = {
             k: KIND_GENERIC,
             t: +new Date(),

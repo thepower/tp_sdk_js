@@ -335,13 +335,13 @@ const NetworkLib = {
     },
 
     async getAddressChain(address) {
-        const {chain} = await this.askBlockchainTo('GET_MY_CHAIN', {address});
+        const {chain} = await NetworkLib.askBlockchainTo('GET_MY_CHAIN', {address});
 
         return chain;
     },
 
     async sendPreparedTX(tx, callback) {
-        const response = await this.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
+        const response = await NetworkLib.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
         if (callback) {
             setTimeout(() => checkTransaction(response.txid, callback), 1000);
         }
@@ -350,13 +350,13 @@ const NetworkLib = {
 
     sendTxAndWaitForResponse(tx, timeout = 120000) {
         return new Promise((resolve, reject) => {
-            this.sendPreparedTX(tx, (success, message) => success ? resolve(message) : reject(message));
+            NetworkLib.sendPreparedTX(tx, (success, message) => success ? resolve(message) : reject(message));
             setTimeout(() => reject('Timeout'), timeout);
         })
     },
 
     async getFeeSettings() {
-        const settings = await this.askBlockchainTo('GET_NODE_SETTINGS');
+        const settings = await NetworkLib.askBlockchainTo('GET_NODE_SETTINGS');
         return _getFeeSettings(settings);
     },
 };
