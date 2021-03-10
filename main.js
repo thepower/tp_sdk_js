@@ -1,5 +1,5 @@
 //const addressLib = require('./address-lib');
-const {packAndSignTX, composeSCMethodCallTX} = require('./transactions-lib');
+const {packAndSignTX, composeSCMethodCallTX, composeStoreTX} = require('./transactions-lib');
 const {sendTxAndWaitForResponse, getFeeSettings, setChain} = require('./network-lib');
 const scInterface = require('./sc_interface');
 //const scLoader = require('./sc_loader');
@@ -20,6 +20,7 @@ module.exports = {
     packAndSignTX,
     loadFeeSettings,
     composeSCMethodCallTX,
+    composeStoreTX,
     sendTxAndWaitForResponse,
     loadScLocal
 };

@@ -340,7 +340,8 @@ const NetworkLib = {
         return chain;
     },
 
-    async sendPreparedTX(tx, callback) {
+    async sendPreparedTX(tx, chain, callback) {
+        await NetworkLib.setChain(chain);
         const response = await NetworkLib.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
         if (callback) {
             setTimeout(() => checkTransaction(response.txid, callback), 1000);
@@ -348,7 +349,7 @@ const NetworkLib = {
         return response;
     },
 
-    sendTxAndWaitForResponse(tx, timeout = 120000) {
+    sendTxAndWaitForResponse(tx, chain, timeout = 120000) {
         return new Promise((resolve, reject) => {
             NetworkLib.sendPreparedTX(tx, (success, message) => success ? resolve(message) : reject(message));
             setTimeout(() => reject('Timeout'), timeout);

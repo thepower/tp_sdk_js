@@ -22,6 +22,7 @@ const KIND_REGISTER = 0x11;
 const KIND_DEPLOY = 0x12;
 const KIND_PATCH = 0x13;
 const KIND_BLOCK = 0x14;
+const KIND_LSTORE = 22;
 
 const blobURL = URL.createObjectURL(new Blob([ '(',
         function(){
@@ -275,6 +276,20 @@ const TransactionsAPI = {
             s: +new Date(),
             p: [/*[PURPOSE_GAS, gasToken, gasValue]*/],
             c: toCall,
+        };
+
+        return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
+    },
+
+    composeStoreTX(address, patches, wif, feeSettings) {
+        const body = {
+            k: KIND_LSTORE,
+            t: +new Date(),
+            f: Buffer.from(AddressAPI.parseTextAddress(address)),
+            //to: Buffer.from(AddressAPI.parseTextAddress(sc)),
+            s: +new Date(),
+            p: [],
+            pa: msgPack.encode(patches.map(i => msgPack.encode(i)))
         };
 
         return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
