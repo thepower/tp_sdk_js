@@ -153,17 +153,59 @@ will produce transaction like `g6Rib2R5xDiHoWsQoXTPAAABaFHKEeOhZsQIgAFAAAMAA9+id
 
 The result of this method call with the same arguments will be different since timestamps are used in the transaction.
 
+- composeSCMethodCallTX
+
+Use this method to compose, wrap and sign an SC method call transaction
+
+```js
+composeSCMethodCallTX(address, sc, toCall, wif, feeSettings)
+```
+
+It accepts the following arguments:
+
+address - text representation of source wallet address;
+
+sc - smart contract address;
+
+toCall - array containing method name and parameters. Format: ['method', [parameters]];
+
+wif - wallet's private key in WIF format;
+
+feeSettings - object that contains information regarding fee settings in the shard. It may be empty if shard does not require a fee;
+
+Method returns packed and signed transaction, presented in base64.
+
+- composeStoreTX
+
+Use this method to compose, wrap and sign a storage transaction
+
+```js
+composeStoreTX(address, patches, wif, feeSettings)
+```
+
+It accepts the following arguments:
+
+address - text representation of source wallet address;
+
+patches - array of patches like {p:[path], v:value, f:'set'};
+
+toCall - array containing method name and parameters. Format: ['method', [parameters]];
+
+wif - wallet's private key in WIF format;
+
+feeSettings - object that contains information regarding fee settings in the shard. It may be empty if shard does not require a fee;
+
+Method returns packed and signed transaction, presented in base64.
+
 - composeRegisterTX
 
 ```js
-async composeRegisterTX(chain, wif, referrer)
+async composeRegisterTX(wif, referrer)
 ```
 
 Use this method to compose and sign registration transaction.
 
 It accepts the following arguments:
-
-chain - id of the shard that you are using;
 
 wif - newly generated wallet's private key in WIF format;
 
@@ -174,7 +216,7 @@ The method returns a promise that will return packed and signed transaction, pre
 For example:
 
 ```js
-await tpSdk.transactionsLib.composeRegisterTX(1, 'L2vedH1QQaKfes8EkiWnfc1Atx45WMVuXDMVC1nutKAwMSSQQgEg')
+await tpSdk.transactionsLib.composeRegisterTX('L2vedH1QQaKfes8EkiWnfc1Atx45WMVuXDMVC1nutKAwMSSQQgEg')
 ```
 
 will produce transaction like `g6Rib2R5xDyEoWsRoXTPAAABaFHQt6mlbm9uY2XNAfGhaMQg5cQq5McyGwdywxhoHrUeCWmQgqdnUUf/uCUVqkeWyK+jc2lnkcRs/0cwRQIhALQ6z/biF10pPrMfMlPTlbHFiRQDsACgfVpf6hEIrayPAiAQjaQcZmgB4h+g+RdkR/lAIaFrE3gaV9aQ3RiyD7cGOgIhA5Rh5yw1RiIQ+LBscl2taxpnNVMVREXBtxQOpVCIFPmBo3ZlcgI=`
@@ -395,4 +437,148 @@ baseEx - number of bytes allowed for minimal fee;
 kb - cost of each Kb above the minimum.
 
 Each shard has it's own fee settings. Shard's settings are available via nodes HTTP api. API is described here: [https://github.com/thepower/api_doc/wiki/11_api_reference](https://github.com/thepower/api_doc/wiki/11_api_reference)
+
+### Network Lib
+
+The network-lib.js file contains implementation of the operations with blockchain.
+
+It exposes following methods:
+
+ - sendTxAndWaitForResponse
+
+```js
+sendTxAndWaitForResponse(tx, chain, timeout)
+```
+Use this method to send transaction to selected chain.
+
+It accepts the following arguments:
+
+tx - packed and signed transaction in base64;
+
+chain - chain number;
+
+timeout - timeout in milliseconds. Defaults to 120000.
+
+Method returns a Promise that resolves to information about created transaction or error information.
+
+- getFeeSettings
+
+```js
+async getFeeSettings(chain)
+```
+
+Use this method to load fee settings from selected chain.
+
+It accepts the following arguments:
+
+chain - chain number;
+
+Method asynchronously returns an object containing chain's fee settings.
+
+- getBlock
+
+```js
+async getBlock(chain, hash = 'last')
+```
+
+Use this method to load given block from selected chain.
+
+It accepts the following arguments:
+
+chain - chain number;
+
+hash - hash of a block to get;
+
+Method asynchronously returns an object containing block.
+
+- getWallet
+
+```js
+async getWallet(chain, address)
+```
+
+Use this method to load given wallet information from selected chain.
+
+It accepts the following arguments:
+
+chain - chain number;
+
+address - address of a wallet to get;
+
+Method asynchronously returns an object containing wallet infomation.
+
+- addChain
+
+```js
+async addChain(number, nodes)
+```
+
+Use this method to add new chain to then list.
+
+It accepts the following arguments:
+
+number - chain number;
+
+nodes - array containing data about chain nodes. Each array element should be in format {address: < address>, nodeId: < id>},
+where address is url for a node (like http://51.15.80.38:43288) or http://c102n6.thepower.io:43382) and nodeId is
+string identifying the node;
+
+Method does not return a value.
+
+### scLoader Lib
+
+The sc_loader.js file contains implementation of the instantiation of smart contract.
+
+- instantiateSC
+
+```js
+async instantiateSC(address, chain)
+```
+
+Use this method to instantiate remote SC.
+
+It accepts the following arguments:
+
+address - text representation of smart contract address;
+
+chain - chain number;
+
+This method returns object with instantiatiated smart contract.   
+Returned object exposes executeMethod method (explained below).
+
+- loadScLocal
+
+```js
+async loadScLocal(code, state = {}, balance = {})
+```
+
+Use this method to locally load smart contract from.
+
+It accepts the following arguments:
+
+code - typed array (Uint8Array), containing smart contract code.
+
+state - object containing smart contract state.
+
+balance - object containing smart contract balance.
+
+This method returns object with instantiatiated smart contract.   
+Returned object exposes executeMethod method.
+
+
+- executeMethod
+
+```js
+async executeMethod(method, params = [])
+```
+
+Use this method to execute method of a smart contract.
+
+It accepts the following arguments:
+
+method - name of the method.
+
+params - array with method parameters.
+
+This method asynchronously executes specified smart contract method.
 

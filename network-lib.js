@@ -197,11 +197,12 @@ const checkTransaction = async (txId, callback, count = 0) => {
     }
 
     if (status) {
-        if (status.error) {
+        /*if (status.error) {
             callback(false, status.res);
         } else {
             callback(true, 'Success');
-        }
+        }*/
+        callback(!status.error, status.res);
     } else if (count < 240) {
         setTimeout(() => checkTransaction(txId, callback, ++count), 1000);
     } else {
@@ -236,6 +237,8 @@ function _getFeeSettings(settings) {
 
 const NetworkLib = {
     async setChain(chain) {
+        if (chain === currentChain) return;
+
         if (nodesCache[chain]) {
             await setCurrentConfig(chain, nodesCache[chain]);
         } else {
@@ -335,30 +338,55 @@ const NetworkLib = {
     },
 
     async getAddressChain(address) {
-        const {chain} = await this.askBlockchainTo('GET_MY_CHAIN', {address});
+        const {chain} = await NetworkLib.askBlockchainTo('GET_MY_CHAIN', {address});
 
         return chain;
     },
 
-    async sendPreparedTX(tx, callback) {
-        const response = await this.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
+    async sendPreparedTX(tx, chain, callback) {
+        await NetworkLib.setChain(chain);
+        const response = await NetworkLib.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
         if (callback) {
             setTimeout(() => checkTransaction(response.txid, callback), 1000);
         }
         return response;
     },
 
-    sendTxAndWaitForResponse(tx, timeout = 120000) {
+    async sendTxAndWaitForResponse(tx, chain, timeout = 120000) {
         return new Promise((resolve, reject) => {
-            this.sendPreparedTX(tx, (success, message) => success ? resolve(message) : reject(message));
+            NetworkLib.sendPreparedTX(tx, chain,(success, message) => success ? resolve(message) : reject(message));
             setTimeout(() => reject('Timeout'), timeout);
         })
     },
 
-    async getFeeSettings() {
-        const settings = await this.askBlockchainTo('GET_NODE_SETTINGS');
+    async getFeeSettings(chain) {
+        await NetworkLib.setChain(chain);
+        const settings = await NetworkLib.askBlockchainTo('GET_NODE_SETTINGS');
         return _getFeeSettings(settings);
     },
 };
 
-module.exports = NetworkLib;
+//module.exports = NetworkLib;
+module.exports = {
+    sendTxAndWaitForResponse: NetworkLib.sendTxAndWaitForResponse,
+    getFeeSettings: NetworkLib.getFeeSettings,
+    getBlock: async (chain, hash = 'last') => {
+        await NetworkLib.setChain(chain);
+        return await NetworkLib.askBlockchainTo('GET_BLOCK',{hash});
+    },
+    getWallet: async (chain, address) => {
+        await NetworkLib.setChain(chain);
+        return await NetworkLib.askBlockchainTo('GET_WALLET',{address});
+    },
+    addChain: (number, nodes) => {
+        bootstrap[number] = nodes
+    },
+    loadScCode: async (chain, address) => {
+        await NetworkLib.setChain(chain);
+        return new Uint8Array(await NetworkLib.askBlockchainTo('GET_SC_CODE', {chain, address}))
+    },
+    loadScState: async (chain, address) => {
+        await NetworkLib.setChain(chain);
+        return new Uint8Array(await NetworkLib.askBlockchainTo('GET_SC_STATE', {chain, address}))
+    }
+};

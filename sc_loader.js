@@ -1,12 +1,15 @@
 const scApi = require('./sc_interface');
-const {askBlockchainTo} = require('./network-lib');
+const {loadScCode, loadScState} = require('./network-lib');
+const msgPack = require('./tp_msgpack/msgpack-lite');
 
 let loadedSC = {};
 
 const instantiateSC = async (address, chain = 8) => {
-    loadedSC[address] = loadedSC[address] || new Uint8Array(await askBlockchainTo('GET_SC_CODE', {chain, address}));
-    const state = new Uint8Array(await askBlockchainTo('GET_SC_STATE', {chain, address}));
+    loadedSC[address] = loadedSC[address] || (await loadScCode(chain, address));
+    const state = await loadScState(chain, address);
     return new scApi(loadedSC[address], state);
 };
 
-module.exports = instantiateSC;
+const loadScLocal = (code, state = {}, balance = {}) => new scApi(code, msgPack.encode(state), balance);
+
+module.exports = {loadScLocal, instantiateSC};

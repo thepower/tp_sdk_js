@@ -4,6 +4,7 @@ const msgPack = require('./tp_msgpack/msgpack-lite');
 const Axios = require('axios');
 const Buffer = require("safe-buffer").Buffer;
 const AddressAPI = require('./address-lib');
+const sha512 = require('./js-sha512/sha512.min')
 
 const TAG_TIMESTAMP = 0x01;
 const TAG_PUBLIC_KEY = 0x02;
@@ -22,70 +23,52 @@ const KIND_REGISTER = 0x11;
 const KIND_DEPLOY = 0x12;
 const KIND_PATCH = 0x13;
 const KIND_BLOCK = 0x14;
-
-const blobURL = URL.createObjectURL(new Blob([ '(',
-        function(){
-            onmessage = function(e) {
-                var origin = e.data[3];
-                self.importScripts(origin + '/sha512.min.js');
-
-                function validateHash(hash, difficulty) {
-                    var index = hash.findIndex(item => item !== 0);
-                    var hashDifficulty = index !== -1 ? index * 8 + (8 - (hash[index].toString(2).length)) : hash.length * 8;
-                    return hashDifficulty >= difficulty;
-                }
-
-                function numToArray(number) {
-                    if (number >= 0 && number <= 0x7F) return [number];
-                    else if (number <= 0xFF) return [0xCC, number];
-                    else if (number <= 0xFFFF) return [0xCD, (number >> 8) & 255, number & 255];
-                    else if (number <= 0xFFFFFFFF) return [0xCE, (number >>> 24) & 255, (number >>> 16) & 255, (number >>> 8) & 255, number & 255];
-                    throw new Error('Nonce generation error')
-                }
-
-                function mergeTypedArrays(a, b, c) {
-                    var d = new a.constructor(a.length + b.length + c.length);
-                    d.set(a);
-                    d.set(b, a.length);
-                    d.set(c, a.length + b.length);
-                    return d;
-                }
-
-                var nonce = 0, hash;
-                var body = e.data[0];
-                var offset = e.data[1];
-                var difficulty = e.data[2];
-                var part1 = body.slice(0, offset), part2 = body.slice(offset + 1);
-                do {
-                    nonce++;
-                    let packedBody = mergeTypedArrays(part1, numToArray(nonce), part2);
-                    hash = sha512.array(packedBody);
-                } while (!validateHash(hash, difficulty));
-
-                postMessage(nonce);
-            };
-        }.toString(),
-        ')()'], {type: 'application/javascript' })),
-    worker = new Worker(blobURL);
-
-URL.revokeObjectURL(blobURL);
+const KIND_LSTORE = 22;
 
 function _generateNonce(body, offset, powDifficulty) {
     if (powDifficulty > 30) {
         throw new Error('PoW difficulty is too high')
     }
-    return new Promise(function(resolve, reject) {
-        worker.onmessage = function(event) {
-            resolve(event.data);
-        };
-        worker.onerror = function(event) {
-            reject(event);
-        };
-        worker.postMessage([body, offset, powDifficulty, window.location.origin]);
+    return new Promise(function(resolve) {
+        function validateHash(hash, difficulty) {
+            let index = hash.findIndex(item => item !== 0);
+            let hashDifficulty = index !== -1 ? index * 8 + (8 - (hash[index].toString(2).length)) : hash.length * 8;
+            return hashDifficulty >= difficulty;
+        }
+
+        function numToArray(number) {
+            if (number >= 0 && number <= 0x7F) return [number];
+            else if (number <= 0xFF) return [0xCC, number];
+            else if (number <= 0xFFFF) return [0xCD, (number >> 8) & 255, number & 255];
+            else if (number <= 0xFFFFFFFF) return [0xCE, (number >>> 24) & 255, (number >>> 16) & 255, (number >>> 8) & 255, number & 255];
+            throw new Error('Nonce generation error')
+        }
+
+        function mergeTypedArrays(a, b, c) {
+            let d = new a.constructor(a.length + b.length + c.length);
+            d.set(a);
+            d.set(b, a.length);
+            d.set(c, a.length + b.length);
+            return d;
+        }
+
+        let nonce = 0, hash;
+        const part1 = body.slice(0, offset), part2 = body.slice(offset + 1);
+
+        (function nonceIteration() {
+            nonce++;
+            let packedBody = mergeTypedArrays(part1, numToArray(nonce), part2);
+            hash = sha512.array(packedBody);
+            if ((!validateHash(hash, powDifficulty))) {
+                resolve(nonce);
+            } else {
+                setImmediate(nonceIteration)
+            }
+        })();
     });
 }
 
-async function _getRegisterTxBody(chain, publicKey, timestamp, referrer, powDifficulty = 16) {
+async function _getRegisterTxBody(publicKey, timestamp, referrer, powDifficulty = 16) {
     let body = {
         k: KIND_REGISTER,
         t: timestamp,
@@ -193,12 +176,12 @@ const TransactionsAPI = {
         const payload = msgPack.encode(_getSimpleTransferTxBody(from, to, token, amount, message, timestamp, seq, feeSettings));
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
-    async composeRegisterTX(chain, wif, referrer) {
+    async composeRegisterTX(wif, referrer) {
         const keyPair = Bitcoin.ECPair.fromWIF(wif);
         const publicKey = keyPair.getPublicKeyBuffer();
         const timestamp = parseInt(+new Date());
 
-        const payload = msgPack.encode(await _getRegisterTxBody(chain, publicKey, timestamp, referrer));
+        const payload = msgPack.encode(await _getRegisterTxBody(publicKey, timestamp, referrer));
         return msgPack.encode(_wrapAndSignPayload(payload, keyPair, publicKey)).toString('base64');
     },
 
@@ -308,6 +291,20 @@ const TransactionsAPI = {
             s: +new Date(),
             p: [/*[PURPOSE_GAS, gasToken, gasValue]*/],
             c: toCall,
+        };
+
+        return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
+    },
+
+    composeStoreTX(address, patches, wif, feeSettings) {
+        const body = {
+            k: KIND_LSTORE,
+            t: +new Date(),
+            f: Buffer.from(AddressAPI.parseTextAddress(address)),
+            //to: Buffer.from(AddressAPI.parseTextAddress(sc)),
+            s: +new Date(),
+            p: [],
+            pa: msgPack.encode(patches.map(i => msgPack.encode(i)))
         };
 
         return TransactionsAPI.packAndSignTX(_computeFee(body, feeSettings), wif)
