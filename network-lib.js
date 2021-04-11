@@ -29,7 +29,7 @@ const chainNodesUrl = _ => `${nodes[nodeIndex].address}/api/nodes`;
 const settingsUrl = _ => `${nodes[nodeIndex].address}/api/settings`;
 
 function checkResponseValidity(data) {
-    if (!(data instanceof ArrayBuffer)) {
+    if (!(data instanceof ArrayBuffer) && !(data instanceof Buffer)) {
         if (!data.ok) {
             if (data.msg) {
                 throw new Error(`(${data.code}) ${data.msg}`);
