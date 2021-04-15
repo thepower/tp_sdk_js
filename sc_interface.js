@@ -75,6 +75,14 @@ class SmartContractWrapper {
                     return 0
                 },
 
+                get_mean_time: () => {
+                    return 0
+                },
+
+                get_entropy: () => {
+                    return 0
+                },
+
                 get_args_raw_size: () => {
                     return msgPack.encode(params/*, {codec}*/).length
                 },
