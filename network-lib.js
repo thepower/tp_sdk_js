@@ -183,7 +183,7 @@ const bootstrapChain = async (chain) => {
     throw new Error(`Unknown chain ${chain}`);
 };
 
-const checkTransaction = async (txId, callback, count = 0) => {
+const checkTransaction = async (txId, callback, timeout, count = 0) => {
     let status;
 
     if (!callback) {
@@ -202,11 +202,11 @@ const checkTransaction = async (txId, callback, count = 0) => {
         } else {
             callback(true, 'Success');
         }*/
-        callback(!status.error, status.res);
-    } else if (count < 240) {
-        setTimeout(() => checkTransaction(txId, callback, ++count), 1000);
+        callback(!status.error, `${txId}: ${status.res}`);
+    } else if (count < timeout) {
+        setTimeout(() => checkTransaction(txId, callback, timeout, ++count), 900);
     } else {
-        callback(false, 'Transaction status lost');
+        callback(false, `${txId}: Transaction status lost`);
     }
 }
 
@@ -343,19 +343,19 @@ const NetworkLib = {
         return chain;
     },
 
-    async sendPreparedTX(tx, chain, callback) {
+    async sendPreparedTX(tx, chain, callback, timeout) {
         await NetworkLib.setChain(chain);
         const response = await NetworkLib.askBlockchainTo('CREATE_TRANSACTION', {data: {tx}});
         if (callback) {
-            setTimeout(() => checkTransaction(response.txid, callback), 1000);
+            setTimeout(() => checkTransaction(response.txid, callback, timeout), 900);
         }
         return response;
     },
 
-    async sendTxAndWaitForResponse(tx, chain, timeout = 120000) {
+    async sendTxAndWaitForResponse(tx, chain, timeout = 120) {
         return new Promise((resolve, reject) => {
-            NetworkLib.sendPreparedTX(tx, chain,(success, message) => success ? resolve(message) : reject(message));
-            setTimeout(() => reject('Timeout'), timeout);
+            NetworkLib.sendPreparedTX(tx, chain,(success, message) => success ? resolve(message) : reject(message), timeout);
+            //setTimeout(() => reject('Timeout'), timeout);
         })
     },
 

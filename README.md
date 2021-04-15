@@ -457,7 +457,7 @@ tx - packed and signed transaction in base64;
 
 chain - chain number;
 
-timeout - timeout in milliseconds. Defaults to 120000.
+timeout - timeout in seconds. Defaults to 120.
 
 Method returns a Promise that resolves to information about created transaction or error information.
 
