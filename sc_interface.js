@@ -83,6 +83,10 @@ class SmartContractWrapper {
                     return 0
                 },
 
+                get_entropy_size: () => {
+                    return 0
+                },
+
                 get_args_raw_size: () => {
                     return msgPack.encode(params/*, {codec}*/).length
                 },
