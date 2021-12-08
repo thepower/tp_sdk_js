@@ -3,7 +3,7 @@
 ### Description
 
 Here is a JavaScript implementation of The Power API.
-The API description can be found here: [https://github.com/thepower/api_doc/wiki](https://github.com/thepower/api_doc/wiki)
+The API description can be found here: [https://thepower.io/api](https://thepower.io/api)
 
 ### Quick start
 
@@ -29,7 +29,7 @@ When you are using transaction library, please make sure that the file js-sha512
 
 The address-lib.js file contains implementation the operations with address representations.
 
-The Power addresses are explained in detail here: [https://github.com/thepower/api_doc/wiki/03_addresses](https://github.com/thepower/api_doc/wiki/03_addresses)
+The Power addresses are explained in detail here: [https://thepower.io/api#rec204410230](https://thepower.io/api#rec204410230)
 
 
 It exposes following methods:
@@ -111,7 +111,7 @@ representation (like `AA100000005033174046`).
 
 The transactions-lib.js file contains implementation of the operations with transactions.
 
-Transaction format is described here: [https://github.com/thepower/api_doc/wiki/08_transactions_v2](https://github.com/thepower/api_doc/wiki/08_transactions_v2)
+Transaction format is described here: [https://thepower.io/api#rec204451500](https://thepower.io/api#rec204451500)
 
 It exposes following methods:
 
@@ -436,7 +436,7 @@ baseEx - number of bytes allowed for minimal fee;
 
 kb - cost of each Kb above the minimum.
 
-Each shard has it's own fee settings. Shard's settings are available via nodes HTTP api. API is described here: [https://github.com/thepower/api_doc/wiki/11_api_reference](https://github.com/thepower/api_doc/wiki/11_api_reference)
+Each shard has it's own fee settings. Shard's settings are available via nodes HTTP api. API is described here: [https://thepower.io/api#rec204475502](https://thepower.io/api#rec204475502)
 
 ### Network Lib
 
@@ -520,7 +520,7 @@ It accepts the following arguments:
 number - chain number;
 
 nodes - array containing data about chain nodes. Each array element should be in format {address: < address>, nodeId: < id>},
-where address is url for a node (like http://51.15.80.38:43288) or http://c102n6.thepower.io:43382) and nodeId is
+where address is url for a node (like http://51.15.248.43:49841) or http://c103n1.thepower.io:49841) and nodeId is
 string identifying the node;
 
 Method does not return a value.
